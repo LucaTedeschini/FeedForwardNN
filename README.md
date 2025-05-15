@@ -1,5 +1,5 @@
 # TODO WIP LIST
-- [ ] Neural Network Structure
+- [x] Neural Network Structure
 - [ ] Feed Forward Step
 - [ ] Backpropagation step (for single input)
 - [ ] Going parallel
