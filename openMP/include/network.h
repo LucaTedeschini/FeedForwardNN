@@ -9,6 +9,7 @@ typedef struct {
     float* weights;
     float bias;
     float value;
+    float delta;
 } node;
 
 typedef struct {
