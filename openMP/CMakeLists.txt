@@ -1,6 +1,26 @@
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.10)
+
 project(openMP C)
 
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -Wall -Wpedantic -fopenmp -lm")
 
-add_executable(openMP main.c)
+set(SRC_DIR src)
+set(LIB_DIR include)
+
+set(HEADERS
+        ${LIB_DIR}/network.h
+        include/utilities.h
+)
+
+set(SOURCES
+        ${SRC_DIR}/main.c
+        src/utilities.c
+)
+
+
+
+add_executable(openMP ${SOURCES} ${HEADERS})
+
+target_link_libraries(openMP m)
+
+target_include_directories(openMP PRIVATE ${LIB_DIR})
