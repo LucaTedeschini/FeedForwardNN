@@ -9,7 +9,8 @@
 
 
 layer* create_network(const int* layers_size, int size);
-
+void fill_input_layer(layer* network);
+void print_output_layer(layer* network, int size);
 
 
 #endif //OPENMP_UTILITIES_H
