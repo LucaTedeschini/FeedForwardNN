@@ -1,6 +1,6 @@
 # TODO WIP LIST
 - [x] Neural Network Structure
-- [ ] Feed Forward Step
+- [x] Feed Forward Step
 - [ ] Backpropagation step (for single input)
 - [ ] Going parallel
 - [ ] MNIST dataset preparation
