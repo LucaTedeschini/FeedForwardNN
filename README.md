@@ -1,7 +1,7 @@
 # TODO WIP LIST
 - [x] Neural Network Structure
 - [x] Feed Forward Step
-- [ ] Backpropagation step (for single input)
+- [x] Backpropagation step (for single input)
 - [ ] Going parallel
 - [ ] MNIST dataset preparation
 - [ ] Testing the network over the MNIST challenge
