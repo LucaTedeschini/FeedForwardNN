@@ -5,17 +5,19 @@
 #include "network.h"
 #include "utilities.h"
 #include "dataloader.h"
+#include "readconfig.h"
 
-#define EPOCHS 10
-#define TRAIN_SIZE 60000
-#define TEST_SIZE 10000
-//TODO: load this from a config file maybe?
-const int layer_sizes[] = {IMAGE_SIZE, 500, 150, 10};
-const int size = 4;
+
 
 
 int main(void) {
     srand(time(NULL));
+
+    int train_size, test_size, epochs;
+    int layer_sizes[MAX_LAYERS];
+    int size;
+
+    read_config("../config.txt", &train_size, &test_size, &epochs, layer_sizes, &size);
 
     layer* network = create_network(layer_sizes, size);
 
@@ -28,22 +30,23 @@ int main(void) {
     int* true_encoded = malloc((sizeof(int) * 10));
     float* results;
 
-    int *shuffled_indices = malloc(TRAIN_SIZE * sizeof(int));
-    for(int k=0; k<TRAIN_SIZE; ++k) shuffled_indices[k] = k;
+    int *shuffled_indices = malloc(train_size * sizeof(int));
+    for(int k=0; k<train_size; ++k) shuffled_indices[k] = k;
 
     // Epochs
-    for (int i=0; i<EPOCHS; i++) {
+    for (int i=0; i<epochs; i++) {
         error = 0;
-        for (int k = TRAIN_SIZE - 1; k > 0; k--) {
+        for (int k = train_size - 1; k > 0; k--) {
             int rand_idx = rand() % (k + 1);
             int temp = shuffled_indices[k];
             shuffled_indices[k] = shuffled_indices[rand_idx];
             shuffled_indices[rand_idx] = temp;
         }
-
-        for (int j=0; j < TRAIN_SIZE; j++) {
-            if (j % 5000 == 0) {
-                printf("Processing %i / %i\n", j, TRAIN_SIZE);
+        printf("-----------\n");
+        for (int j=0; j < train_size; j++) {
+            if (j % 6000 == 0) {
+                printf("+");
+                fflush(stdout);
             }
             fill_input_layer(network, X_train[shuffled_indices[j]]);
             results = forward_pass(network, size);
@@ -53,9 +56,9 @@ int main(void) {
             error += cross_entropy_loss(results, true_encoded, network[size-1].size);
         }
 
-        printf("\n#####################\nEpoch %i - Loss %f\n", i, error / TRAIN_SIZE);
+        printf("\n#####################\nEpoch %i - Loss %f\n", i, error / (float)train_size);
         int correct = 0;
-        for (int j=0; j<TEST_SIZE; j++) {
+        for (int j=0; j<test_size; j++) {
             fill_input_layer(network, X_test[j]);
             results = forward_pass(network, size);
             one_hot_encoding(true_encoded, Y_test[j], 10);
@@ -63,7 +66,7 @@ int main(void) {
             if (check_correctness(results, true_encoded, 10))
                 correct++;
         }
-        printf("Accuracy : %f%%", ((double)correct / TEST_SIZE) * 100);
+        printf("Accuracy : %f%%", ((double)correct / test_size) * 100);
         printf("\n#####################\n");
 
     }

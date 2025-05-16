@@ -4,10 +4,9 @@
 #include "network.h"
 #include "utilities.h"
 #include <stdlib.h>
-#include <stdio.h>
+
 #include <math.h>
-#include <stdlib.h>
-#include <time.h>
+
 
 
 float random_float(void) {
@@ -67,8 +66,8 @@ float derivative_activation_function(float value) {
 float cross_entropy_loss(const float* prediction, const int* real, int size) {
     float loss = 0.0f;
     for (int i = 0; i < size; i++) {
-        if (real[i] > 0.0f) {
-            loss -= real[i] * logf(prediction[i] + 1e-9f);  // avoid log(0)
+        if (real[i] > 0) {
+            loss -= (float)real[i] * logf(prediction[i] + 1e-9f);  // avoid log(0)
         }
     }
     return loss;
@@ -119,7 +118,7 @@ float* forward_pass(layer* network, int size){
 
 void backward_pass(layer* network, int size, const int* actual_value, const float* output_results) {
     for (int i=0; i < network[size-1].size; i++) {
-        float y = actual_value[i];
+        float y = (float)actual_value[i];
         float o = output_results[i];
 
 
