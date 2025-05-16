@@ -6,7 +6,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
+#include <time.h>
 
+
+float random_float(void) {
+    return ((float)rand() / (float)RAND_MAX) * 0.02f - 0.01f;
+}
 
 layer* create_network(const int* layers_size, int size) {
     layer* network = malloc(sizeof(layer) * size);
@@ -20,13 +26,13 @@ layer* create_network(const int* layers_size, int size) {
 
         // fill the nodes weights and bias
         for (int j = 0; j < layers_size[i]; j++) {
-            network[i].nodes[j].bias = 0.2f;
+            network[i].nodes[j].bias = 0.1f;
             network[i].nodes[j].delta = 0.0f;
 
             if (i < size - 1) {
                 network[i].nodes[j].weights = malloc(sizeof(float) * layers_size[i + 1]);
                 for (int z = 0; z < layers_size[i + 1]; z++) {
-                    network[i].nodes[j].weights[z] = 0.1f;
+                    network[i].nodes[j].weights[z] = random_float();
                 }
             }
         }
@@ -35,9 +41,9 @@ layer* create_network(const int* layers_size, int size) {
     return network;
 }
 
-void fill_input_layer(layer* network){
+void fill_input_layer(layer* network, const float* values){
     for (int i=0; i<network[0].size; i++) {
-        network[0].nodes[i].value = i;
+        network[0].nodes[i].value = values[i];
     }
 }
 
@@ -46,6 +52,7 @@ float* get_output_layer(layer* network, int size) {
     for (int i=0; i < network[size-1].size; i++) {
         results[i] = network[size-1].nodes[i].value;
     }
+
     return softmax(results, network[size-1].size);
 }
 
@@ -57,7 +64,7 @@ float derivative_activation_function(float value) {
     return value > 0 ? 1.0f : 0.0f;
 }
 //unused, simple formula used
-float cross_entropy_loss(const float* prediction, const float* real, int size) {
+float cross_entropy_loss(const float* prediction, const int* real, int size) {
     float loss = 0.0f;
     for (int i = 0; i < size; i++) {
         if (real[i] > 0.0f) {
@@ -69,21 +76,21 @@ float cross_entropy_loss(const float* prediction, const float* real, int size) {
 
 float* softmax(const float* values, int size) {
     float* result = malloc(sizeof(float) * size);
-    if (values != NULL) {
-        float sum = 0.0f;
-        for (int i = 0; i < size; i++) {
-            // Avoids overflows
-
-            result[i] = expf(values[i]);
-            sum += result[i];
-        }
-
-        for (int i = 0; i < size; i++) {
-            result[i] /= sum;
-        }
-    } //TODO: make else condition, but it should never land in else
+    float max_val = values[0];
+    for (int i = 1; i < size; i++) {
+        if (values[i] > max_val) max_val = values[i];
+    }
+    float sum = 0.0f;
+    for (int i = 0; i < size; i++) {
+        result[i] = expf(values[i] - max_val); // *sottrai max_val*
+        sum += result[i];
+    }
+    for (int i = 0; i < size; i++) {
+        result[i] /= sum;
+    }
     return result;
 }
+
 
 float* forward_pass(layer* network, int size){
     for (int i=0; i<size-1; i++) {
@@ -97,7 +104,11 @@ float* forward_pass(layer* network, int size){
             }
         }
         for (int j=0; j<network[i+1].size; j++) {
-            network[i+1].nodes[j].value = activation_function(accumulator[j] + network[i+1].nodes[j].bias);
+            if (i == size - 2) {
+                network[i+1].nodes[j].value = accumulator[j] + network[i+1].nodes[j].bias; // output layer: no activation
+            } else {
+                network[i+1].nodes[j].value = activation_function(accumulator[j] + network[i+1].nodes[j].bias); // hidden: ReLU
+            }
         }
 
         free(accumulator);
@@ -106,10 +117,12 @@ float* forward_pass(layer* network, int size){
     return get_output_layer(network, size);
 }
 
-void backward_pass(layer* network, int size, const float* actual_value, const float* output_results) {
+void backward_pass(layer* network, int size, const int* actual_value, const float* output_results) {
     for (int i=0; i < network[size-1].size; i++) {
         float y = actual_value[i];
         float o = output_results[i];
+
+
 
         //simplified formula, output_results comes from a softmax. Otherwise Jacobians would be involved.
         //TODO: use the complete formula
@@ -144,5 +157,34 @@ void backpropagation(layer* network, int size, float learning_rate) {
     }
 }
 
+void one_hot_encoding(int* encoded, int value, int size) {
+    for (int i=0; i<size; i++) {
+        encoded[i] = 0;
+    }
+
+    encoded[value] = 1;
+
+}
+
+bool check_correctness(float* prediction, int* truth, int lenght) {
+    int max_pred = 0;
+    int max_truth = 0;
+    float max_val = -1.0f;
+    for (int i=0; i<lenght; i++) {
+        if (prediction[i] > max_val) {
+            max_pred = i;
+            max_val = prediction[i];
+        }
+    }
+
+    for (int i=0; i<lenght; i++) {
+        if (truth[i] == 1) {
+            max_truth = i;
+        }
+    }
+
+    return max_truth == max_pred;
+
+}
 
 

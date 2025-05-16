@@ -10,11 +10,13 @@ set(LIB_DIR include)
 set(HEADERS
         ${LIB_DIR}/network.h
         include/utilities.h
+        include/dataloader.h
 )
 
 set(SOURCES
         ${SRC_DIR}/main.c
         src/utilities.c
+        src/dataloader.c
 )
 
 
