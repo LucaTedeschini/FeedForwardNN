@@ -16,8 +16,21 @@ int main(void) {
     int train_size, test_size, epochs;
     int layer_sizes[MAX_LAYERS];
     int size;
-
+    int total_weights, total_nodes;
+    printf("Reading configurations...\n");
     read_config("../config.txt", &train_size, &test_size, &epochs, layer_sizes, &size);
+    printf("Done!\n");
+    printf("Network has %i layers\n",size);
+    printf("[ ");
+    for (int i = 0; i<size; i++) {
+        total_nodes+=layer_sizes[i];
+        if (i < size-1) total_weights += layer_sizes[i] * layer_sizes[i+1];
+        printf("%i ",layer_sizes[i]);
+    }
+    printf("] \n");
+
+    printf("Network has %i total weights and %i total nodes\n",total_weights,total_nodes);
+
 
     layer* network = create_network(layer_sizes, size);
 
@@ -35,6 +48,7 @@ int main(void) {
 
     // Epochs
     for (int i=0; i<epochs; i++) {
+        printf("Running epoch %i / %i\n", i ,epochs);
         error = 0;
         for (int k = train_size - 1; k > 0; k--) {
             int rand_idx = rand() % (k + 1);

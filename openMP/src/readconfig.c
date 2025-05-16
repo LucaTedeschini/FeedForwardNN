@@ -44,6 +44,16 @@ int read_config(const char* filename, int* train_size, int* test_size, int* epoc
         }
     }
 
+    if (layer_sizes[*size - 1] != 10) {
+        printf("Last layer must have 10 nodes!\n");
+        exit(1);
+    }
+
+    if (layer_sizes[0] != 784) {
+        printf("First layer must have 784 nodes!\n");
+        exit(1);
+    }
+
 
     fclose(file);
     return 0;
