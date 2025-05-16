@@ -52,3 +52,5 @@ Mkfile.old
 dkms.conf
 /openMP/cmake-build-debug
 /openMP/.idea
+MNIST/mnist_train.csv
+MNIST/mnist_test.csv
