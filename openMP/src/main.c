@@ -29,7 +29,7 @@ int main(void) {
     }
     printf("] \n");
 
-    printf("Network has %i total weights and %i total nodes\n",total_weights,total_nodes);
+    printf("Network has %i total weights (%fKB) and %i total nodes\n",total_weights,(double)total_weights*4/1024,total_nodes);
 
 
     layer* network = create_network(layer_sizes, size);
@@ -48,7 +48,7 @@ int main(void) {
 
     // Epochs
     for (int i=0; i<epochs; i++) {
-        printf("Running epoch %i / %i\n", i ,epochs);
+        printf("Running epoch %i / %i\n", i+1 ,epochs);
         error = 0;
         for (int k = train_size - 1; k > 0; k--) {
             int rand_idx = rand() % (k + 1);
@@ -56,12 +56,7 @@ int main(void) {
             shuffled_indices[k] = shuffled_indices[rand_idx];
             shuffled_indices[rand_idx] = temp;
         }
-        printf("-----------\n");
         for (int j=0; j < train_size; j++) {
-            if (j % 6000 == 0) {
-                printf("+");
-                fflush(stdout);
-            }
             fill_input_layer(network, X_train[shuffled_indices[j]]);
             results = forward_pass(network, size);
             one_hot_encoding(true_encoded, Y_train[shuffled_indices[j]], 10);
