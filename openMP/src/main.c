@@ -84,6 +84,7 @@ int main(void) {
 
             if (check_correctness(results, true_encoded, 10))
                 correct++;
+            free(results);
         }
         printf("Accuracy : %f%%", ((double)correct / test_size) * 100);
         printf("\n#####################\n");

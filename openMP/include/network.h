@@ -8,7 +8,7 @@
 
 typedef struct {
     int size;
-    float** weights;
+    float* weights;
     float* values;
     float* bias;
     float* delta;

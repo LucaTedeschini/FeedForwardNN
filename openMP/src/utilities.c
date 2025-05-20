@@ -23,8 +23,8 @@ layer* create_network(const int* layers_size, int size) {
         network[i].bias = malloc(sizeof(float) * layers_size[i]);
         network[i].delta = malloc(sizeof(float) * layers_size[i]);
         network[i].size = layers_size[i];
-        network[i].weights = malloc(sizeof(float*) * layers_size[i]);
-        // Malloc the weight array and bias only for the first N-1 nodes
+        if (i < size - 1)
+            network[i].weights = malloc(sizeof(float) * layers_size[i] * layers_size[i+1]);
 
 
         // fill the nodes weights and bias
@@ -32,11 +32,9 @@ layer* create_network(const int* layers_size, int size) {
             network[i].bias[j] = 0.1f;
             network[i].delta[j] = 0.0f;
 
-
             if (i < size - 1) {
-                network[i].weights[j]= malloc(sizeof(float) * layers_size[i + 1]);
                 for (int z = 0; z < layers_size[i + 1]; z++) {
-                    network[i].weights[j][z] = random_float();
+                    network[i].weights[j * layers_size[i+1] + z] = random_float();
                 }
             }
         }
@@ -94,14 +92,13 @@ float* softmax(float* values, int size) {
     return values;
 }
 
-float* matrix_mul(float** weights, const float* values, const float* biases, float* result, int input_size, int output_size) {
-#pragma omp parallel for
+float* matrix_mul(const float* weights, const float* values, const float* biases, float* result, int input_size, int output_size) {
     for (int j = 0; j < output_size; j++) {
         float sum = biases[j];
         for (int i = 0; i < input_size; i++) {
-            sum += values[i] * weights[i][j];
+            sum += values[i] * weights[i * output_size + j];
         }
-        result[j] = sum + biases[j];
+        result[j] = sum;
     }
     return result;
 }
@@ -119,7 +116,6 @@ float* forward_pass(layer* network, int size){
 }
 
 void backward_pass(layer* network, int size, const int* actual_value, const float* output_results) {
-#pragma omp for
     for (int i=0; i < network[size-1].size; i++) {
         float y = (float)actual_value[i];
         float o = output_results[i];
@@ -135,7 +131,7 @@ void backpropagation(layer* network, int size, float learning_rate) {
             float sum = 0.0f;
             for (int j = 0; j < network[l+1].size; j++) {
                 // Sum the contributes
-                sum += network[l].weights[i][j] * network[l+1].delta[j];
+                sum += network[l].weights[i * network[l+1].size + j] * network[l+1].delta[j];
             }
             float val = network[l].values[i];
             //Compute the delta, multiplying contributes with the derivative
@@ -146,7 +142,7 @@ void backpropagation(layer* network, int size, float learning_rate) {
         for (int i = 0; i < network[l].size; i++) {
             for (int j = 0; j < network[l+1].size; j++) {
                 // Gradient descent update
-                network[l].weights[i][j] -= learning_rate * network[l].values[i] * network[l+1].delta[j];
+                network[l].weights[i * network[l+1].size + j] -= learning_rate * network[l].values[i] * network[l+1].delta[j];
             }
         }
 

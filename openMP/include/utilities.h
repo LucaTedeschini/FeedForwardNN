@@ -22,7 +22,7 @@ void backward_pass(layer* network, int size, const int* actual_value, const floa
 void backpropagation(layer* network, int size, float learning_rate);
 void one_hot_encoding(int* encoded, int value, int size);
 bool check_correctness(float* prediction, int* truth, int lenght);
-float* matrix_mul(float** weights, const float* values, const float* biases,float* result, int input_size, int output_size);
+float* matrix_mul(const float* weights, const float* values, const float* biases,float* result, int input_size, int output_size);
 
 
 #endif //OPENMP_UTILITIES_H
