@@ -6,6 +6,7 @@
 #include "utilities.h"
 #include "dataloader.h"
 #include "readconfig.h"
+#include "hpc.h"
 
 
 
@@ -16,7 +17,8 @@ int main(void) {
     int train_size, test_size, epochs;
     int layer_sizes[MAX_LAYERS];
     int size;
-    int total_weights, total_nodes;
+    int total_weights = 0, total_nodes = 0;
+    double start, end;
     printf("Reading configurations...\n");
     read_config("../config.txt", &train_size, &test_size, &epochs, layer_sizes, &size);
     printf("Done!\n");
@@ -48,14 +50,18 @@ int main(void) {
 
     // Epochs
     for (int i=0; i<epochs; i++) {
+        start = hpc_gettime();
         printf("Running epoch %i / %i\n", i+1 ,epochs);
         error = 0;
+
+        //Shuffling indexes
         for (int k = train_size - 1; k > 0; k--) {
             int rand_idx = rand() % (k + 1);
             int temp = shuffled_indices[k];
             shuffled_indices[k] = shuffled_indices[rand_idx];
             shuffled_indices[rand_idx] = temp;
         }
+
         for (int j=0; j < train_size; j++) {
             fill_input_layer(network, X_train[shuffled_indices[j]]);
             results = forward_pass(network, size);
@@ -63,7 +69,11 @@ int main(void) {
             backward_pass(network, size, true_encoded, results);
             backpropagation(network, size, 0.01f);
             error += cross_entropy_loss(results, true_encoded, network[size-1].size);
+
+            free(results);
         }
+        end = hpc_gettime();
+        printf("Took: %fs\n", end-start);
 
         printf("\n#####################\nEpoch %i - Loss %f\n", i, error / (float)train_size);
         int correct = 0;

@@ -5,16 +5,13 @@
 #ifndef OPENMP_NETWORK_H
 #define OPENMP_NETWORK_H
 
-typedef struct {
-    float* weights;
-    float bias;
-    float value;
-    float delta;
-} node;
 
 typedef struct {
-    node* nodes;
     int size;
+    float** weights;
+    float* values;
+    float* bias;
+    float* delta;
 } layer;
 
 

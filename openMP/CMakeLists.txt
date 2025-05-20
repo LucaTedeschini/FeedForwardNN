@@ -12,6 +12,7 @@ set(HEADERS
         include/utilities.h
         include/dataloader.h
         include/readconfig.h
+        include/hpc.h
 )
 
 set(SOURCES

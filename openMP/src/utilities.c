@@ -4,6 +4,7 @@
 #include "network.h"
 #include "utilities.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <math.h>
 
@@ -18,20 +19,24 @@ layer* create_network(const int* layers_size, int size) {
 
     // Instantiate each layer
     for (int i=0; i<size; i++) {
-        network[i].nodes = malloc(sizeof(node) * layers_size[i]);
+        network[i].values = malloc(sizeof(float) * layers_size[i]);
+        network[i].bias = malloc(sizeof(float) * layers_size[i]);
+        network[i].delta = malloc(sizeof(float) * layers_size[i]);
         network[i].size = layers_size[i];
+        network[i].weights = malloc(sizeof(float*) * layers_size[i]);
         // Malloc the weight array and bias only for the first N-1 nodes
 
 
         // fill the nodes weights and bias
         for (int j = 0; j < layers_size[i]; j++) {
-            network[i].nodes[j].bias = 0.1f;
-            network[i].nodes[j].delta = 0.0f;
+            network[i].bias[j] = 0.1f;
+            network[i].delta[j] = 0.0f;
+
 
             if (i < size - 1) {
-                network[i].nodes[j].weights = malloc(sizeof(float) * layers_size[i + 1]);
+                network[i].weights[j]= malloc(sizeof(float) * layers_size[i + 1]);
                 for (int z = 0; z < layers_size[i + 1]; z++) {
-                    network[i].nodes[j].weights[z] = random_float();
+                    network[i].weights[j][z] = random_float();
                 }
             }
         }
@@ -42,14 +47,14 @@ layer* create_network(const int* layers_size, int size) {
 
 void fill_input_layer(layer* network, const float* values){
     for (int i=0; i<network[0].size; i++) {
-        network[0].nodes[i].value = values[i];
+        network[0].values[i] = values[i];
     }
 }
 
 float* get_output_layer(layer* network, int size) {
     float* results = malloc(sizeof(float) * network[size-1].size);
     for (int i=0; i < network[size-1].size; i++) {
-        results[i] = network[size-1].nodes[i].value;
+        results[i] = network[size-1].values[i];
     }
 
     return softmax(results, network[size-1].size);
@@ -73,59 +78,54 @@ float cross_entropy_loss(const float* prediction, const int* real, int size) {
     return loss;
 }
 
-float* softmax(const float* values, int size) {
-    float* result = malloc(sizeof(float) * size);
+float* softmax(float* values, int size) {
     float max_val = values[0];
     for (int i = 1; i < size; i++) {
         if (values[i] > max_val) max_val = values[i];
     }
     float sum = 0.0f;
     for (int i = 0; i < size; i++) {
-        result[i] = expf(values[i] - max_val); // *sottrai max_val*
-        sum += result[i];
+        values[i] = expf(values[i] - max_val); // *sottrai max_val*
+        sum += values[i];
     }
     for (int i = 0; i < size; i++) {
-        result[i] /= sum;
+        values[i] /= sum;
+    }
+    return values;
+}
+
+float* matrix_mul(float** weights, const float* values, const float* biases, float* result, int input_size, int output_size) {
+#pragma omp parallel for
+    for (int j = 0; j < output_size; j++) {
+        float sum = biases[j];
+        for (int i = 0; i < input_size; i++) {
+            sum += values[i] * weights[i][j];
+        }
+        result[j] = sum + biases[j];
     }
     return result;
 }
-
-
 float* forward_pass(layer* network, int size){
     for (int i=0; i<size-1; i++) {
-        // TODO: Better logic here, DRY and memory management
-        float* accumulator = malloc(sizeof(float) * network[i+1].size);
-        for (int j=0; j<network[i+1].size; j++) accumulator[j] = 0.0f;
-
-        for (int j=0; j<network[i].size; j++) {
-            for (int z = 0; z < network[i+1].size; z++) {
-                accumulator[z] += network[i].nodes[j].weights[z] * network[i].nodes[j].value;
+        matrix_mul(network[i].weights, network[i].values, network[i+1].bias, network[i+1].values, network[i].size, network[i+1].size);
+        if (i != size - 2) {
+            for (int j=0; j < network[i+1].size; j++) {
+                network[i+1].values[j] = activation_function(network[i+1].values[j]); // hidden: ReLU
             }
         }
-        for (int j=0; j<network[i+1].size; j++) {
-            if (i == size - 2) {
-                network[i+1].nodes[j].value = accumulator[j] + network[i+1].nodes[j].bias; // output layer: no activation
-            } else {
-                network[i+1].nodes[j].value = activation_function(accumulator[j] + network[i+1].nodes[j].bias); // hidden: ReLU
-            }
-        }
-
-        free(accumulator);
     }
 
     return get_output_layer(network, size);
 }
 
 void backward_pass(layer* network, int size, const int* actual_value, const float* output_results) {
+#pragma omp for
     for (int i=0; i < network[size-1].size; i++) {
         float y = (float)actual_value[i];
         float o = output_results[i];
-
-
-
         //simplified formula, output_results comes from a softmax. Otherwise Jacobians would be involved.
         //TODO: use the complete formula
-        network[size-1].nodes[i].delta = o - y;
+        network[size-1].delta[i] = o - y;
     }
 }
 
@@ -135,23 +135,23 @@ void backpropagation(layer* network, int size, float learning_rate) {
             float sum = 0.0f;
             for (int j = 0; j < network[l+1].size; j++) {
                 // Sum the contributes
-                sum += network[l].nodes[i].weights[j] * network[l+1].nodes[j].delta;
+                sum += network[l].weights[i][j] * network[l+1].delta[j];
             }
-            float val = network[l].nodes[i].value;
+            float val = network[l].values[i];
             //Compute the delta, multiplying contributes with the derivative
-            network[l].nodes[i].delta = derivative_activation_function(val) * sum;
+            network[l].delta[i] = derivative_activation_function(val) * sum;
         }
 
         // Update weights and biases
         for (int i = 0; i < network[l].size; i++) {
             for (int j = 0; j < network[l+1].size; j++) {
                 // Gradient descent update
-                network[l].nodes[i].weights[j] -= learning_rate * network[l].nodes[i].value * network[l+1].nodes[j].delta;
+                network[l].weights[i][j] -= learning_rate * network[l].values[i] * network[l+1].delta[j];
             }
         }
 
         for (int i = 0; i < network[l+1].size; i++) {
-            network[l+1].nodes[i].bias -= learning_rate * network[l+1].nodes[i].delta;
+            network[l+1].bias[i] -= learning_rate * network[l+1].delta[i];
         }
     }
 }
