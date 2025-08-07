@@ -11,6 +11,6 @@
 #define IMAGE_SIZE 784
 
 
-void read_dataset(float*** X, int** Y, bool is_train);
+void read_dataset(float** X, int** Y, bool is_train);
 
 #endif //OPENMP_DATALOADER_H

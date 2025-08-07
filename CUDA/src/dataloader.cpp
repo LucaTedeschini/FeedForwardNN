@@ -7,7 +7,7 @@
 #include "dataloader.hpp"
 
 
-void read_dataset(float*** X, int** Y, bool is_train) {
+void read_dataset(float** X, int** Y, bool is_train) {
     int length = is_train ? 60000 : 10000;
 
     char fpath[30];
@@ -18,11 +18,11 @@ void read_dataset(float*** X, int** Y, bool is_train) {
     }
 
     FILE *file = fopen(fpath, "r");
-    float** X_file = new float*[length];
+    float* X_file = new float[length * IMAGE_SIZE];
     int* Y_file = new int[length];
-    for (int i=0; i < length; i++) {
-        X_file[i] = new float[IMAGE_SIZE];
-    }
+    //for (int i=0; i < length; i++) {
+    //    X_file[i] = new float[IMAGE_SIZE];
+    //}
 
 
     if (file == nullptr) {
@@ -45,7 +45,7 @@ void read_dataset(float*** X, int** Y, bool is_train) {
                 printf("ERROR PARSING IMAGE AT [%d][%d]\n", i, j);
                 exit(1);
             }
-            X_file[i][j] = atoi(token) / 255.0f;
+            X_file[i*IMAGE_SIZE + j] = atoi(token) / 255.0f;
             token = strtok(nullptr, ",");
         }
 
