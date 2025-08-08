@@ -1,8 +1,10 @@
 #include <cstdio>
+#include <random>
 #include "readconfig.hpp"
 #include "dataloader.hpp"
 
 #define BLK_DIM 512
+
 
 
 __global__ void forwardpass(
@@ -23,15 +25,34 @@ __global__ void forwardpass(
     for (int k = 0; k < in_size; k++) {
         sum += weights[i * in_size + k] * layer_input[k];
     }
-    layer_output[i] = sum + biases[i];
+    //Applying ReLU
+    layer_output[i] = sum + biases[i] > 0 ? sum + biases[i] : 0.0f;
 }
 
 
-    //cudaMalloc(&d_train_X, train_size * IMAGE_SIZE * sizeof(float));
-    //cudaMemcpy(d_biases, h_biases, total_nodes * sizeof(float), cudaMemcpyHostToDevice);
+float* softmax(float* values, const int size) {
+    // Launching a CUDA kernel for a 10-dimension vector would introduce more overhead than performances.
+    // Hence, the softmax is not parallelized
+    float max_val = values[0];
+    for (int i = 1; i < size; i++) {
+        if (values[i] > max_val) max_val = values[i];
+    }
+    float sum = 0.0f;
+    for (int i = 0; i < size; i++) {
+        values[i] = expf(values[i] - max_val);
+        sum += values[i];
+    }
+    for (int i = 0; i < size; i++) {
+        values[i] /= sum;
+    }
+    return values;
+}
+
 
 
 int main() {
+    std::default_random_engine generator;
+    std::uniform_real_distribution<float> distribution(-0.5, 0.5);
     int train_size, test_size, epochs;
     int layer_sizes[MAX_LAYERS];
     int size;
@@ -95,18 +116,18 @@ int main() {
     }
 
     for (int i=0; i < total_biases; i++) {
-        h_network_biases[i] = 0.0f;
+        h_network_biases[i] = 0.1f;
     }
 
     for (int i=0; i < total_weights; i++) {
-        h_network_weights[i] = 1.0f;
+        h_network_weights[i] = distribution(generator);
     }
 
     //Creating pointers to device memory
-    float* d_network_values = new float[total_nodes];
-    float* d_network_deltas = new float[total_nodes];
-    float* d_network_biases = new float[total_biases];
-    float* d_network_weights = new float[total_weights];
+    float* d_network_values;
+    float* d_network_deltas;
+    float* d_network_biases;
+    float* d_network_weights;
 
     // cudaMalloc
     cudaMalloc(&d_network_values, total_nodes * sizeof(float));
@@ -122,19 +143,13 @@ int main() {
 
 
     // Loading the dataset
-    //float *X_train, *X_test;
-    //int *Y_train, *Y_test;
-    //read_dataset(&X_train, &Y_train, true);
-    //read_dataset(&X_test, &Y_test, false);
-
-    float* X_train = new float[train_size * IMAGE_SIZE];
-    // DEBUG: set all the input values to 1
-    for (int i = 0; i < train_size * IMAGE_SIZE; i++) {
-        X_train[i] = 1.0f;
-    }
+    float *X_train, *X_test;
+    int *Y_train, *Y_test;
+    read_dataset(&X_train, &Y_train, true);
+    read_dataset(&X_test, &Y_test, false);
 
     // Creating pointers to device memory
-    float* d_X_train = new float[train_size * IMAGE_SIZE];
+    float* d_X_train;
 
     //cudaMalloc
     cudaMalloc(&d_X_train, train_size * IMAGE_SIZE * sizeof(float));
@@ -145,6 +160,7 @@ int main() {
     for (int epoch = 0; epoch < epochs; epoch++) {
         printf("Epoch %d/%d\n", epoch + 1, epochs);
         // For each epoch, cycle on every image
+        int correct = 0;
         for (int image_index = 0; image_index < train_size; image_index++) {
             float* d_input_image = d_X_train + image_index * IMAGE_SIZE;
             cudaMemcpy(d_network_values, d_input_image, layer_sizes[0] * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -169,18 +185,21 @@ int main() {
                     in_size,
                     out_size
                 );
+                float* h_network_output = new float[layer_sizes[size-1]];
+                float* d_network_output = d_network_values + h_values_indexes[size-1];
+                cudaMemcpy(h_network_output, d_network_output, layer_sizes[size-1] * sizeof(float), cudaMemcpyDeviceToHost);
+                h_network_output = softmax(h_network_output, layer_sizes[size-1]);
+                int idx_max = 0;
+                for (int i=0; i < layer_sizes[size-1]; i++) {
+                    if (h_network_output[i] > h_network_output[idx_max]) idx_max = i;
+                }
 
+                if (Y_train[image_index] == idx_max) correct++;
             }
 
         }
         // Retrieve the last layer values: they should be equal for each epoch (for each run)
-        float* h_network_output = new float[layer_sizes[size-1]];
-        float* d_network_output = d_network_values + h_values_indexes[size-1];
-        cudaMemcpy(h_network_output, d_network_output, layer_sizes[size-1] * sizeof(float), cudaMemcpyDeviceToHost);
-
-        for (int node_ix = 0; node_ix < layer_sizes[size-1]; node_ix++) {
-            printf("\tNode %d: %f\n", node_ix, h_network_output[node_ix]);
-        }
+        printf("Accuracy: %f\n", static_cast<float>(correct) / static_cast<float>(train_size));
 
     }
 
