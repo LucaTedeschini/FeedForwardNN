@@ -48,6 +48,80 @@ float* softmax(float* values, const int size) {
     return values;
 }
 
+void one_hot_encoding(int* encoded, int value, int size) {
+    // This operation is not parallelized: the size needed is 10. Loading a cuda kernel would introduce
+    // overhead
+    for (int i=0; i<size; i++) {
+        encoded[i] = 0;
+    }
+    encoded[value] = 1;
+}
+
+void backward_pass(float* layer, int size, const int* one_hot_label, const float* output_results) {
+    // Same as the other utilities functions: since the layer size is small, launching a kernel will introduce
+    // overhead
+    for (int i=0; i < size; i++) {
+        const float y = static_cast<float>(one_hot_label[i]);
+        const float o = output_results[i];
+        //simplified formula, output_results comes from a softmax. Otherwise Jacobians would be involved.
+        layer[i] = o - y;
+    }
+}
+
+
+
+__global__ void compute_hidden_delta(
+    float* delta,
+    const float* next_delta,
+    const float* weights,
+    const float* values,
+    int layer_size,
+    int next_size
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= layer_size) return;
+
+    float sum = 0.0f;
+    for (int j = 0; j < next_size; j++) {
+        sum += weights[j * layer_size + i] * next_delta[j];
+    }
+
+    float val = values[i];
+    float deriv = (val > 0) ? 1.0f : 0.0f; // ReLU derivative
+    delta[i] = deriv * sum;
+}
+
+
+__global__ void update_weights(
+    float* weights,
+    const float* values,
+    const float* next_delta,
+    int layer_size,
+    int next_size,
+    float lr
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total_weights = layer_size * next_size;
+    if (idx >= total_weights) return;
+
+    int i = idx / next_size;
+    int j = idx % next_size;
+
+
+    weights[j * layer_size + i] -= lr * values[i] * next_delta[j];
+}
+
+
+__global__ void update_biases(
+    float* biases,
+    const float* next_delta,
+    int next_size,
+    float lr
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= next_size) return;
+    biases[i] -= lr * next_delta[i];
+}
 
 
 int main() {
@@ -85,7 +159,7 @@ int main() {
 
     for (int i=1; i<size; i++) {
         h_values_indexes[i] = layer_sizes[i-1] + h_values_indexes[i-1];
-        h_deltas_indexes[i] = layer_sizes[i-1] + h_values_indexes[i-1];
+        h_deltas_indexes[i] = layer_sizes[i-1] + h_deltas_indexes[i-1];
     }
 
     for (int i = 0; i < size; i++) {
@@ -108,6 +182,7 @@ int main() {
     float* h_network_deltas = new float[total_nodes];
     float* h_network_biases = new float[total_biases];
     float* h_network_weights = new float[total_weights];
+    int* h_onehot_label = new int[layer_sizes[size-1]];
 
     // initialize host arrays
     for (int i=0; i < total_nodes; i++) {
@@ -128,6 +203,7 @@ int main() {
     float* d_network_deltas;
     float* d_network_biases;
     float* d_network_weights;
+
 
     // cudaMalloc
     cudaMalloc(&d_network_values, total_nodes * sizeof(float));
@@ -174,7 +250,7 @@ int main() {
                 float* d_layer_weights = d_network_weights + h_weights_indexes[layer_index];
                 // May seems like an error but it isn't: h_deltas_indexes stores indexes already shifted, so
                 // layer_index is ok, layer_index wouldn't
-                float* d_layer_biases = d_network_biases + h_deltas_indexes[layer_index];
+                float* d_layer_biases = d_network_biases + h_bias_indexes[layer_index];
 
                 int blocks = (out_size + BLK_DIM - 1) / BLK_DIM;
                 forwardpass<<<blocks, BLK_DIM>>>(
@@ -185,7 +261,15 @@ int main() {
                     in_size,
                     out_size
                 );
+                cudaDeviceSynchronize();
+
+
+                }
+
+                // Compute training accuracy
                 float* h_network_output = new float[layer_sizes[size-1]];
+                float* h_network_deltas_last_layer = new float[layer_sizes[size-1]];
+
                 float* d_network_output = d_network_values + h_values_indexes[size-1];
                 cudaMemcpy(h_network_output, d_network_output, layer_sizes[size-1] * sizeof(float), cudaMemcpyDeviceToHost);
                 h_network_output = softmax(h_network_output, layer_sizes[size-1]);
@@ -193,8 +277,57 @@ int main() {
                 for (int i=0; i < layer_sizes[size-1]; i++) {
                     if (h_network_output[i] > h_network_output[idx_max]) idx_max = i;
                 }
-
                 if (Y_train[image_index] == idx_max) correct++;
+
+                //#1 Compute loss value
+                //      one hot encoding
+                one_hot_encoding(h_onehot_label,Y_train[image_index],layer_sizes[size-1]);
+
+
+                //#2 Backward pass
+                backward_pass(h_network_deltas_last_layer, layer_sizes[size-1], h_onehot_label, h_network_output);
+
+                // Now I need to copy everything on device again to compute the forward pass
+                cudaMemcpy(d_network_deltas + h_deltas_indexes[size-1],
+                   h_network_deltas_last_layer,
+                   layer_sizes[size-1] * sizeof(float),
+                   cudaMemcpyHostToDevice);
+
+                //#3 Backpropagation
+                for (int l = size-2; l >= 0; l--) {
+                    int layer_size = layer_sizes[l];
+                    int next_size  = layer_sizes[l+1];
+
+                    float* d_layer_values  = d_network_values + h_values_indexes[l];
+                    float* d_layer_delta   = d_network_deltas + h_deltas_indexes[l];
+                    float* d_next_delta    = d_network_deltas + h_deltas_indexes[l+1];
+                    float* d_layer_weights = d_network_weights + h_weights_indexes[l];
+                    float* d_layer_biases  = d_network_biases + h_bias_indexes[l];
+                    int blocks = (layer_size + BLK_DIM - 1) / BLK_DIM;  // per compute_hidden_delta
+
+                    // --- Compute delta ---
+                    compute_hidden_delta<<<blocks, BLK_DIM>>>(
+                        d_layer_delta, d_next_delta, d_layer_weights, d_layer_values,
+                        layer_size, next_size
+                    );
+                    cudaDeviceSynchronize();
+
+                    float learning_rate = 0.01f;
+                    // --- Update weights ---
+                    int total_weights_layer = layer_size * next_size;
+
+                    blocks = (total_weights_layer + BLK_DIM - 1) / BLK_DIM;
+                    update_weights<<<blocks, BLK_DIM>>>(
+                        d_layer_weights, d_layer_values, d_next_delta,
+                        layer_size, next_size, learning_rate
+                    );
+
+                    // --- Update biases ---
+                    blocks = (next_size + BLK_DIM - 1) / BLK_DIM;
+                    update_biases<<<blocks, BLK_DIM>>>(d_layer_biases, d_next_delta, next_size, learning_rate);
+                    cudaDeviceSynchronize();
+
+
             }
 
         }
