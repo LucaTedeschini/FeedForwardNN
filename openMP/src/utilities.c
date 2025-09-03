@@ -93,6 +93,7 @@ float* softmax(float* values, int size) {
 }
 
 float* matrix_mul(const float* weights, const float* values, const float* biases, float* result, int input_size, int output_size) {
+#pragma omp parallel for
     for (int j = 0; j < output_size; j++) {
         float sum = biases[j];
         for (int i = 0; i < input_size; i++) {
